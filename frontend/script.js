@@ -1,5 +1,5 @@
 // ===== API Configuration =====
-const API_BASE_URL = "/api";
+const API_BASE_URL = "https://terradominus.life";
 let authToken = localStorage.getItem("authToken");
 let currentUser = null;
 
