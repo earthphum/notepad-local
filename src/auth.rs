@@ -1,4 +1,5 @@
 use crate::{
+    logging,
     state::AppState,
     utils::{generate_token, verify_password},
 };
@@ -20,10 +21,20 @@ pub async fn login(
     State(_state): State<AppState>,
     Json(req): Json<LoginRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
+    // Get admin user from environment
     let admin_user = match env::var("ADMIN_USER") {
-        Ok(user) => user,
+        Ok(user) => {
+            if user.is_empty() {
+                logging::log_config_error("ADMIN_USER", "empty value");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Server configuration error" })),
+                );
+            }
+            user
+        }
         Err(_) => {
-            eprintln!("❌ ADMIN_USER environment variable not set");
+            logging::log_config_error("ADMIN_USER", "not set");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "error": "Server configuration error" })),
@@ -31,6 +42,7 @@ pub async fn login(
         }
     };
 
+    // Get admin password hash from environment
     let admin_hash = match env::var("ADMIN_PASS_HASH") {
         Ok(mut hash) => {
             // Remove surrounding quotes if present
@@ -38,40 +50,36 @@ pub async fn login(
                 hash = hash.trim_matches('"').to_string();
             }
 
-            // Debug: Show raw bytes and hex representation
-            eprintln!("🔍 Raw hash bytes: {:?}", hash.as_bytes());
-            eprintln!("🔍 Raw hash hex: {:x?}", hash.as_bytes());
-            eprintln!("🔍 Raw hash length: {} bytes", hash.len());
-            eprintln!("🔍 Raw hash char count: {} chars", hash.chars().count());
+            // Validate hash format in production
+            let is_development =
+                env::var("RUST_ENV").unwrap_or_else(|_| "development".to_string()) != "production";
 
-            // Check for null bytes or other issues
-            if hash.contains('\0') {
-                eprintln!("❌ Hash contains null bytes!");
-            }
+            if !is_development {
+                // In production, only log hash format validation issues
+                if !hash.starts_with("$2b$")
+                    && !hash.starts_with("$2a$")
+                    && !hash.starts_with("$2y$")
+                {
+                    logging::log_config_error("ADMIN_PASS_HASH", "invalid bcrypt format");
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({ "error": "Server configuration error" })),
+                    );
+                }
 
-            // Show first and last few characters
-            if hash.len() > 10 {
-                eprintln!("🔍 First 10 chars: '{}'", &hash[..10]);
-                eprintln!("🔍 Last 10 chars: '{}'", &hash[hash.len() - 10..]);
-            }
-
-            eprintln!("🔍 Full loaded hash: '{}' (length: {})", hash, hash.len());
-
-            // Expected bcrypt hash length check
-            if hash.len() != 60 {
-                eprintln!(
-                    "❌ WARNING: Expected bcrypt hash length of 60, got {}",
-                    hash.len()
-                );
+                if hash.len() != 60 {
+                    logging::log_config_error("ADMIN_PASS_HASH", "invalid bcrypt hash length");
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({ "error": "Server configuration error" })),
+                    );
+                }
             }
 
             hash
         }
-        Err(e) => {
-            eprintln!(
-                "❌ ADMIN_PASS_HASH environment variable not set or inaccessible: {}",
-                e
-            );
+        Err(_) => {
+            logging::log_config_error("ADMIN_PASS_HASH", "not set");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "error": "Server configuration error" })),
@@ -79,38 +87,58 @@ pub async fn login(
         }
     };
 
-    eprintln!(
-        "🔍 Login attempt - Username: '{}', Provided password length: {}",
-        req.username,
-        req.password.len()
-    );
-    eprintln!("🔍 Configured admin user: '{}'", admin_user);
-    eprintln!("🔍 Stored hash: '{}'", admin_hash);
-
+    // Verify credentials
     let username_match = req.username == admin_user;
     let password_match = verify_password(&admin_hash, &req.password);
 
-    eprintln!(
-        "🔍 Username match: {}, Password match: {}",
-        username_match, password_match
-    );
-
+    // Log authentication attempt (without exposing sensitive data)
     if username_match && password_match {
         match generate_token(&req.username) {
             Ok(token) => {
-                return (StatusCode::OK, Json(json!({ "token": token })));
+                logging::log_auth_success(&req.username);
+                (StatusCode::OK, Json(json!({ "token": token })))
             }
             Err(e) => {
-                eprintln!("Token generation failed: {}", e);
-                return (
+                logging::log_auth_error("token generation", &e.to_string());
+                (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({ "error": "Token generation failed" })),
-                );
+                )
             }
         }
+    } else {
+        // Log failed authentication attempt without exposing details
+        let failure_reason = if !username_match {
+            "invalid username"
+        } else {
+            "invalid password"
+        };
+        logging::log_auth_failure(&req.username, failure_reason);
+
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "Invalid credentials" })),
+        )
     }
-    (
-        StatusCode::UNAUTHORIZED,
-        Json(json!({ "error": "Invalid credentials" })),
-    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_login_request_deserialization() {
+        let json_data = r#"{"username":"testuser","password":"testpass"}"#;
+        let login_req: LoginRequest = serde_json::from_str(json_data).unwrap();
+        assert_eq!(login_req.username, "testuser");
+        assert_eq!(login_req.password, "testpass");
+    }
+
+    #[test]
+    fn test_environment_variable_validation() {
+        // Test that we can validate missing environment variables
+        // This is a unit test for validation logic
+        let admin_user = std::env::var("ADMIN_USER");
+        assert!(admin_user.is_err() || admin_user.unwrap().is_empty());
+    }
 }

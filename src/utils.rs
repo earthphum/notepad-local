@@ -11,10 +11,19 @@ pub struct Claims {
 
 pub fn generate_token(username: &str) -> Result<String, Box<dyn std::error::Error>> {
     let secret = env::var("JWT_SECRET").map_err(|_| "JWT_SECRET environment variable not set")?;
+
+    // Validate JWT secret in production
+    let is_development =
+        env::var("RUST_ENV").unwrap_or_else(|_| "development".to_string()) != "production";
+    if !is_development && secret.len() < 32 {
+        return Err("JWT_SECRET must be at least 32 characters in production".into());
+    }
+
     let claims = Claims {
         sub: username.to_string(),
-        exp: (chrono::Utc::now().timestamp() + 3600) as usize,
+        exp: (chrono::Utc::now().timestamp() + 3600) as usize, // 1 hour expiration
     };
+
     encode(
         &Header::default(),
         &claims,
@@ -29,28 +38,101 @@ pub fn hash_password(password: &str) -> String {
 }
 
 pub fn verify_password(hash: &str, password: &str) -> bool {
-    eprintln!("🔐 Verifying password with bcrypt hash: {}", hash);
+    // Remove all sensitive logging - only log errors in production
 
     // Check if hash looks like valid bcrypt format
     if !hash.starts_with("$2b$") && !hash.starts_with("$2a$") && !hash.starts_with("$2y$") {
-        eprintln!("❌ Hash doesn't start with bcrypt identifier ($2b$, $2a$, or $2y$)");
+        // Log this in development only for debugging
+        let is_development =
+            env::var("RUST_ENV").unwrap_or_else(|_| "development".to_string()) != "production";
+        if is_development {
+            eprintln!("❌ Hash doesn't start with bcrypt identifier ($2b$, $2a$, or $2y$)");
+        }
         return false;
     }
 
     match verify(password, hash) {
-        Ok(result) => {
-            if result {
-                eprintln!("✅ Password verification successful");
-            } else {
-                eprintln!("❌ Password verification failed - passwords don't match");
-            }
-            result
-        }
+        Ok(result) => result,
         Err(e) => {
-            eprintln!("❌ Password verification error: {}", e);
-            eprintln!("💡 Full hash that failed: '{}'", hash);
-            eprintln!("💡 Hash length: {} characters", hash.len());
+            // In production, we don't want to expose hash details in logs
+            // Just log that verification failed without sensitive data
+            let is_development =
+                env::var("RUST_ENV").unwrap_or_else(|_| "development".to_string()) != "production";
+            if is_development {
+                eprintln!("❌ Password verification error: {}", e);
+                eprintln!("💡 Hash length: {} characters", hash.len());
+            }
             false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hash_password() {
+        let password = "test_password";
+        let hash = hash_password(password);
+
+        // Verify the hash starts with bcrypt identifier
+        assert!(hash.starts_with("$2b$"));
+
+        // Verify the hash can verify the original password
+        assert!(verify_password(&hash, password));
+
+        // Verify the hash rejects wrong passwords
+        assert!(!verify_password(&hash, "wrong_password"));
+    }
+
+    #[test]
+    fn test_verify_password_invalid_format() {
+        let invalid_hash = "invalid_hash_format";
+        assert!(!verify_password(invalid_hash, "password"));
+    }
+
+    #[test]
+    fn test_generate_token_success() {
+        unsafe {
+            env::set_var(
+                "JWT_SECRET",
+                "test_secret_key_for_testing_that_is_long_enough",
+            );
+        }
+
+        let result = generate_token("testuser");
+        assert!(result.is_ok());
+
+        let token = result.unwrap();
+        assert!(!token.is_empty());
+    }
+
+    #[test]
+    fn test_generate_token_no_secret() {
+        unsafe {
+            env::remove_var("JWT_SECRET");
+        }
+
+        let result = generate_token("testuser");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_generate_token_short_secret_in_production() {
+        unsafe {
+            env::set_var("RUST_ENV", "production");
+        }
+        unsafe {
+            env::set_var("JWT_SECRET", "short");
+        }
+
+        let result = generate_token("testuser");
+        assert!(result.is_err());
+
+        // Clean up
+        unsafe {
+            env::remove_var("RUST_ENV");
         }
     }
 }
