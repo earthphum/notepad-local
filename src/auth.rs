@@ -37,15 +37,41 @@ pub async fn login(
             if hash.starts_with('"') && hash.ends_with('"') {
                 hash = hash.trim_matches('"').to_string();
             }
-            eprintln!(
-                "🔍 Loaded ADMIN_PASS_HASH: '{}' (length: {})",
-                hash,
-                hash.len()
-            );
+
+            // Debug: Show raw bytes and hex representation
+            eprintln!("🔍 Raw hash bytes: {:?}", hash.as_bytes());
+            eprintln!("🔍 Raw hash hex: {:x?}", hash.as_bytes());
+            eprintln!("🔍 Raw hash length: {} bytes", hash.len());
+            eprintln!("🔍 Raw hash char count: {} chars", hash.chars().count());
+
+            // Check for null bytes or other issues
+            if hash.contains('\0') {
+                eprintln!("❌ Hash contains null bytes!");
+            }
+
+            // Show first and last few characters
+            if hash.len() > 10 {
+                eprintln!("🔍 First 10 chars: '{}'", &hash[..10]);
+                eprintln!("🔍 Last 10 chars: '{}'", &hash[hash.len() - 10..]);
+            }
+
+            eprintln!("🔍 Full loaded hash: '{}' (length: {})", hash, hash.len());
+
+            // Expected bcrypt hash length check
+            if hash.len() != 60 {
+                eprintln!(
+                    "❌ WARNING: Expected bcrypt hash length of 60, got {}",
+                    hash.len()
+                );
+            }
+
             hash
         }
-        Err(_) => {
-            eprintln!("❌ ADMIN_PASS_HASH environment variable not set");
+        Err(e) => {
+            eprintln!(
+                "❌ ADMIN_PASS_HASH environment variable not set or inaccessible: {}",
+                e
+            );
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "error": "Server configuration error" })),
