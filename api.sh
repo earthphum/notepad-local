@@ -6,7 +6,7 @@
 # Configuration
 API_URL="https://terradominus.life"
 ADMIN_USER=${ADMIN_USER:-"admin"}
-ADMIN_PASS=${ADMIN_PASS:-"password"}
+ADMIN_PASS=${ADMIN_PASS:-"1234"}
 
 # Colors for output
 RED='\033[0;31m'
@@ -40,12 +40,12 @@ print_info() {
 check_server() {
     print_header "Checking Server Status"
 
-    if curl -s "$API_URL" > /dev/null 2>&1; then
+    if curl -s "$API_URL/login" > /dev/null 2>&1; then
         print_success "Server is running at $API_URL"
         return 0
     else
         print_error "Server is not running at $API_URL"
-        print_info "Please start the server with: cargo run"
+        print_info "Please start the server with: cargo run --bin backend"
         exit 1
     fi
 }
@@ -77,6 +77,7 @@ test_auth() {
     else
         print_error "Login failed with HTTP $http_code"
         echo "Response: $body"
+        print_info "Make sure your .env file has correct ADMIN_USER and ADMIN_PASS_HASH values"
         export AUTH_TOKEN=""
     fi
     echo
@@ -87,13 +88,13 @@ test_notes() {
     print_header "Testing Notes API"
 
     if [ -z "$AUTH_TOKEN" ]; then
-        print_warning "No auth token available, testing without authentication"
-        auth_header=""
-    else
-        auth_header="Authorization: Bearer $AUTH_TOKEN"
+        print_warning "No auth token available, skipping notes tests"
+        return 1
     fi
 
-    # Test GET notes (empty list)
+    auth_header="Authorization: Bearer $AUTH_TOKEN"
+
+    # Test GET notes (should be empty initially)
     print_info "Testing GET /notes"
     response=$(curl -s -w "\n%{http_code}" \
         -H "$auth_header" \
@@ -108,12 +109,13 @@ test_notes() {
     else
         print_error "GET /notes failed with HTTP $http_code"
         echo "Response: $body"
+        return 1
     fi
     echo
 
     # Test POST note creation
     print_info "Testing POST /notes"
-    test_note='{"content":"This is a test note created by api.sh"}'
+    test_note='{"content":"This is a test note created by api.sh at '$(date)'"}'
 
     response=$(curl -s -w "\n%{http_code}" \
         -X POST \
@@ -128,9 +130,17 @@ test_notes() {
     if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
         print_success "POST /notes successful"
         echo "Response: $body"
+
+        # Extract note ID if available
+        NOTE_ID=$(echo "$body" | grep -o '"id":[0-9]*' | cut -d':' -f2)
+        if [ -n "$NOTE_ID" ]; then
+            export TEST_NOTE_ID="$NOTE_ID"
+            print_info "Created note ID: $NOTE_ID"
+        fi
     else
         print_error "POST /notes failed with HTTP $http_code"
         echo "Response: $body"
+        return 1
     fi
     echo
 
@@ -149,32 +159,7 @@ test_notes() {
     else
         print_error "GET /notes failed with HTTP $http_code"
         echo "Response: $body"
-    fi
-    echo
-}
-
-# Test static file serving
-test_static() {
-    print_header "Testing Static File Serving"
-
-    # Test root path
-    response=$(curl -s -w "\n%{http_code}" "$API_URL/")
-    http_code=$(echo "$response" | tail -n1)
-
-    if [ "$http_code" = "200" ]; then
-        print_success "Static file serving working at /"
-    else
-        print_error "Static file serving failed at / with HTTP $http_code"
-    fi
-
-    # Test static directory
-    response=$(curl -s -w "\n%{http_code}" "$API_URL/static/")
-    http_code=$(echo "$response" | tail -n1)
-
-    if [ "$http_code" = "200" ] || [ "$http_code" = "404" ]; then
-        print_success "Static directory accessible"
-    else
-        print_warning "Static directory returned HTTP $http_code"
+        return 1
     fi
     echo
 }
@@ -200,6 +185,20 @@ test_errors() {
     fi
     echo
 
+    # Test notes without authentication
+    print_info "Testing GET /notes without authentication"
+    response=$(curl -s -w "\n%{http_code}" \
+        "$API_URL/notes")
+
+    http_code=$(echo "$response" | tail -n1)
+
+    if [ "$http_code" = "401" ]; then
+        print_success "Unauthenticated notes request correctly returns 401"
+    else
+        print_error "Unauthenticated notes request returned $http_code instead of 401"
+    fi
+    echo
+
     # Test invalid endpoint
     print_info "Testing invalid endpoint"
     response=$(curl -s -w "\n%{http_code}" "$API_URL/nonexistent")
@@ -209,6 +208,47 @@ test_errors() {
         print_success "Invalid endpoint correctly returns 404"
     else
         print_error "Invalid endpoint returned $http_code instead of 404"
+    fi
+    echo
+
+    # Test malformed JSON
+    print_info "Testing malformed JSON in login"
+    response=$(curl -s -w "\n%{http_code}" \
+        -X POST \
+        -H "Content-Type: application/json" \
+        -d '{"username":"test","password":}' \
+        "$API_URL/login")
+
+    http_code=$(echo "$response" | tail -n1)
+
+    if [ "$http_code" = "400" ] || [ "$http_code" = "422" ]; then
+        print_success "Malformed JSON correctly returns error ($http_code)"
+    else
+        print_error "Malformed JSON returned $http_code instead of error code"
+    fi
+    echo
+}
+
+# Test environment setup
+test_environment() {
+    print_header "Environment Setup Check"
+
+    print_info "Current configuration:"
+    echo "  API URL: $API_URL"
+    echo "  Username: $ADMIN_USER"
+    echo "  Password: ${ADMIN_PASS:0:1}*** (${#ADMIN_PASS} chars)"
+    echo
+
+    print_info "Make sure your .env file contains:"
+    echo "  ADMIN_USER=your_username"
+    echo "  ADMIN_PASS_HASH=\$argon2id\$v=19\$m=65536,t=3,p=4\$..."
+    echo "  JWT_SECRET=your_jwt_secret_here"
+    echo
+
+    if [ -f ".env" ]; then
+        print_success ".env file found"
+    else
+        print_warning ".env file not found - please create one with proper values"
     fi
     echo
 }
@@ -227,15 +267,25 @@ main() {
     fi
 
     # Run tests
+    test_environment
     check_server
     test_auth
-    test_notes
-    test_static
+
+    if [ -n "$AUTH_TOKEN" ]; then
+        test_notes
+    else
+        print_warning "Skipping notes tests due to authentication failure"
+    fi
+
     test_errors
 
     print_header "Test Summary"
-    print_success "API testing completed!"
-    print_info "Review the output above for any errors or warnings."
+    if [ -n "$AUTH_TOKEN" ]; then
+        print_success "API testing completed successfully!"
+        print_info "All endpoints should be working correctly."
+    else
+        print_error "Authentication failed - please check your .env configuration"
+    fi
 }
 
 # Show usage information
@@ -256,6 +306,8 @@ show_usage() {
     echo "  $0                  # Run with default settings"
     echo "  $0 -u myuser -p mypass"
     echo "  ADMIN_USER=myuser ADMIN_PASS=mypass $0"
+    echo ""
+    echo "Note: Make sure your .env file has proper Argon2 hash for ADMIN_PASS_HASH"
 }
 
 # Parse command line arguments

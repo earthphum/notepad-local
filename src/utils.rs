@@ -1,5 +1,4 @@
-use argon2::password_hash::{SaltString, rand_core::OsRng};
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
+use bcrypt::{DEFAULT_COST, hash, verify};
 use jsonwebtoken::{EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -26,24 +25,28 @@ pub fn generate_token(username: &str) -> Result<String, Box<dyn std::error::Erro
 
 #[allow(dead_code)]
 pub fn hash_password(password: &str) -> String {
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
-    argon2
-        .hash_password(password.as_bytes(), &salt)
-        .unwrap()
-        .to_string()
+    hash(password, DEFAULT_COST).unwrap()
 }
 
 pub fn verify_password(hash: &str, password: &str) -> bool {
-    let parsed_hash = match PasswordHash::new(hash) {
-        Ok(hash) => hash,
-        Err(e) => {
-            eprintln!("Failed to parse password hash: {}", e);
-            return false;
+    eprintln!(
+        "🔐 Verifying password with bcrypt hash: {}",
+        &hash[..hash.len().min(30)]
+    );
+
+    match verify(password, hash) {
+        Ok(result) => {
+            if result {
+                eprintln!("✅ Password verification successful");
+            } else {
+                eprintln!("❌ Password verification failed - passwords don't match");
+            }
+            result
         }
-    };
-    let argon2 = Argon2::default();
-    argon2
-        .verify_password(password.as_bytes(), &parsed_hash)
-        .is_ok()
+        Err(e) => {
+            eprintln!("❌ Password verification error: {}", e);
+            eprintln!("💡 Hash format is invalid");
+            false
+        }
+    }
 }

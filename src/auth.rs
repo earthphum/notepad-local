@@ -23,6 +23,7 @@ pub async fn login(
     let admin_user = match env::var("ADMIN_USER") {
         Ok(user) => user,
         Err(_) => {
+            eprintln!("❌ ADMIN_USER environment variable not set");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "error": "Server configuration error" })),
@@ -33,6 +34,7 @@ pub async fn login(
     let admin_hash = match env::var("ADMIN_PASS_HASH") {
         Ok(hash) => hash,
         Err(_) => {
+            eprintln!("❌ ADMIN_PASS_HASH environment variable not set");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({ "error": "Server configuration error" })),
@@ -40,7 +42,26 @@ pub async fn login(
         }
     };
 
-    if req.username == admin_user && verify_password(&admin_hash, &req.password) {
+    eprintln!(
+        "🔍 Login attempt - Username: '{}', Provided password length: {}",
+        req.username,
+        req.password.len()
+    );
+    eprintln!("🔍 Configured admin user: '{}'", admin_user);
+    eprintln!(
+        "🔍 Stored hash format: {}",
+        &admin_hash[..admin_hash.len().min(20)]
+    );
+
+    let username_match = req.username == admin_user;
+    let password_match = verify_password(&admin_hash, &req.password);
+
+    eprintln!(
+        "🔍 Username match: {}, Password match: {}",
+        username_match, password_match
+    );
+
+    if username_match && password_match {
         match generate_token(&req.username) {
             Ok(token) => {
                 return (StatusCode::OK, Json(json!({ "token": token })));

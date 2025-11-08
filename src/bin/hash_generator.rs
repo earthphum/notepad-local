@@ -3,7 +3,7 @@ use std::io::{self, Write};
 
 fn main() {
     println!("🔐 Password Hash Generator");
-    println!("This utility generates Argon2 hashes for your passwords.");
+    println!("This utility generates bcrypt hashes for your passwords.");
     println!();
 
     loop {
