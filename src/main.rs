@@ -57,7 +57,7 @@ async fn main() {
     // Build the application with routes
     let app = Router::new()
         // Public routes (no authentication required)
-        .route("/", get(root_handler))
+        //.route("/", get(root_handler))
         .route("/health", get(health_check))
         .route("/contents", get(content::get_public_contents))
         .route("/contents/{id}", get(content::get_content_by_id))
