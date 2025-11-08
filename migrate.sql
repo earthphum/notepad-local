@@ -1,5 +1,5 @@
 -- Database migration for Notepad API v2.0
--- This script updates the notes table to support titles, visibility, and timestamps
+-- This script creates the new notes table with enhanced structure
 
 -- Drop the existing notes table if it exists (for development)
 -- WARNING: This will delete all existing data!
@@ -13,14 +13,14 @@ CREATE TABLE notes (
     user VARCHAR(100) NOT NULL,
     is_public BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
-    -- Indexes for better performance
-    INDEX idx_user (user),
-    INDEX idx_public (is_public),
-    INDEX idx_user_public (user, is_public),
-    INDEX idx_created_at (created_at)
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+-- Create indexes for better performance
+CREATE INDEX idx_user ON notes (user);
+CREATE INDEX idx_public ON notes (is_public);
+CREATE INDEX idx_user_public ON notes (user, is_public);
+CREATE INDEX idx_created_at ON notes (created_at);
 
 -- Optional: Create sample data for testing
 INSERT INTO notes (title, content, user, is_public) VALUES
@@ -30,6 +30,3 @@ INSERT INTO notes (title, content, user, is_public) VALUES
 
 -- Verify the table structure
 DESCRIBE notes;
-```
-
-Now let me update the API testing script to work with the new structure:
