@@ -47,8 +47,3 @@ pub fn verify_password(hash: &str, password: &str) -> bool {
         .verify_password(password.as_bytes(), &parsed_hash)
         .is_ok()
 }
-
-/// Check if a password hash string is in valid Argon2 format
-pub fn is_valid_argon2_hash(hash: &str) -> bool {
-    PasswordHash::new(hash).is_ok()
-}

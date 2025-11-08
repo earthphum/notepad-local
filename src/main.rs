@@ -7,7 +7,6 @@ mod utils;
 
 use axum::{Router, routing::get, routing::post};
 use std::sync::Arc;
-use tower_http::services::ServeDir;
 
 #[tokio::main]
 async fn main() {
@@ -19,8 +18,6 @@ async fn main() {
     let app = Router::new()
         .route("/login", post(auth::login))
         .route("/notes", get(notes::get_notes).post(notes::create_note))
-        .nest_service("/static", ServeDir::new("static"))
-        .fallback_service(ServeDir::new("static"))
         .with_state(state);
 
     println!("🚀 Running on http://localhost:3000");
