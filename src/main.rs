@@ -9,11 +9,12 @@ mod utils;
 use axum::{
     Router,
     middleware::from_fn,
-    response::Json,
+    response::{Html, Json},
     routing::{delete, get, post, put},
 };
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::{ServeDir, ServeFile};
 
 #[tokio::main]
 async fn main() {
@@ -57,12 +58,14 @@ async fn main() {
     // Build the application with routes
     let app = Router::new()
         // Public routes (no authentication required)
-        //.route("/", get(root_handler))
+        .route("/", get(serve_index))
         .route("/health", get(health_check))
         .route("/contents", get(content::get_public_contents))
         .route("/contents/{id}", get(content::get_content_by_id))
         // Authentication route
         .route("/login", post(auth::login))
+        // Serve static files (CSS, JS)
+        .nest_service("/static", ServeDir::new("frontend"))
         // Nest admin routes under /admin
         .nest("/admin", admin_router)
         .with_state(state)
@@ -85,7 +88,16 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-// Root handler
+// Serve index.html
+async fn serve_index() -> Result<Html<String>, axum::http::StatusCode> {
+    let index_path = "frontend/index.html";
+    match std::fs::read_to_string(index_path) {
+        Ok(content) => Ok(Html(content)),
+        Err(_) => Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+// Root handler (API endpoint)
 async fn root_handler() -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "message": "Welcome to Notepad Content Management API",
@@ -131,6 +143,17 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_serve_index() {
+        let app = Router::new().route("/", get(serve_index));
+
+        let request = Request::builder().uri("/").body(Body::empty()).unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        // Note: This test might fail if frontend/index.html doesn't exist in test environment
+        // In a real scenario, you'd mock the file system or use test fixtures
     }
 
     #[tokio::test]

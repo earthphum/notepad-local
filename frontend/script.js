@@ -1,5 +1,5 @@
 // ===== API Configuration =====
-const API_BASE_URL = "/api";
+const API_BASE_URL = "http://127.0.0.1:3000";
 let authToken = localStorage.getItem("authToken");
 let currentUser = null;
 
