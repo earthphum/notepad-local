@@ -8,6 +8,7 @@ mod utils;
 
 use axum::{
     Router,
+    http::{HeaderValue, Method},
     middleware::from_fn,
     response::Json,
     routing::{delete, get, post, put},
@@ -45,6 +46,17 @@ async fn main() {
         .parse::<u16>()
         .unwrap_or(3000);
 
+    // Get CORS configuration
+    let frontend_url = std::env::var("FRONTEND_URL")
+        .unwrap_or_else(|_| "https://www.terradominus.life".to_string());
+
+    // Parse frontend URL with error handling
+    let frontend_origin = frontend_url.parse::<HeaderValue>().unwrap_or_else(|_| {
+        "https://www.terradominus.life"
+            .parse::<HeaderValue>()
+            .unwrap()
+    });
+
     // Build admin routes (authentication handled in each handler)
     let admin_router = Router::new()
         .route("/contents", get(content::get_all_contents))
@@ -68,9 +80,18 @@ async fn main() {
         // Apply CORS middleware to allow frontend access
         .layer(
             CorsLayer::new()
-                .allow_origin(Any) // In production, replace with your frontend URL
-                .allow_methods(Any)
-                .allow_headers(Any),
+                .allow_origin(frontend_origin)
+                .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
+                .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::DELETE,
+                    Method::OPTIONS,
+                ])
+                .allow_headers(Any)
+                .allow_credentials(true),
         )
         // Apply request logging middleware to all routes
         .layer(from_fn(logging::middleware::request_logging_middleware))
