@@ -29,10 +29,13 @@ pub fn hash_password(password: &str) -> String {
 }
 
 pub fn verify_password(hash: &str, password: &str) -> bool {
-    eprintln!(
-        "🔐 Verifying password with bcrypt hash: {}",
-        &hash[..hash.len().min(30)]
-    );
+    eprintln!("🔐 Verifying password with bcrypt hash: {}", hash);
+
+    // Check if hash looks like valid bcrypt format
+    if !hash.starts_with("$2b$") && !hash.starts_with("$2a$") && !hash.starts_with("$2y$") {
+        eprintln!("❌ Hash doesn't start with bcrypt identifier ($2b$, $2a$, or $2y$)");
+        return false;
+    }
 
     match verify(password, hash) {
         Ok(result) => {
@@ -45,7 +48,8 @@ pub fn verify_password(hash: &str, password: &str) -> bool {
         }
         Err(e) => {
             eprintln!("❌ Password verification error: {}", e);
-            eprintln!("💡 Hash format is invalid");
+            eprintln!("💡 Full hash that failed: '{}'", hash);
+            eprintln!("💡 Hash length: {} characters", hash.len());
             false
         }
     }
