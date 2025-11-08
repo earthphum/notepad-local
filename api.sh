@@ -4,7 +4,7 @@
 # This script tests the notepad backend API endpoints
 
 # Configuration
-API_URL="http://localhost:3000"
+API_URL="https://terradominus.life"
 ADMIN_USER=${ADMIN_USER:-"admin"}
 ADMIN_PASS=${ADMIN_PASS:-"password"}
 
@@ -113,7 +113,7 @@ test_notes() {
 
     # Test POST note creation
     print_info "Testing POST /notes"
-    test_note='{"title":"Test Note","content":"This is a test note created by api.sh"}'
+    test_note='{"content":"This is a test note created by api.sh"}'
 
     response=$(curl -s -w "\n%{http_code}" \
         -X POST \
@@ -246,7 +246,7 @@ show_usage() {
     echo "  -h, --help          Show this help message"
     echo "  -u, --user USER     Set admin username (default: admin)"
     echo "  -p, --pass PASS     Set admin password (default: password)"
-    echo "  -u, --url URL       Set API base URL (default: http://localhost:3000)"
+    echo "  -U, --url URL       Set API base URL (default: http://localhost:3000)"
     echo ""
     echo "Environment variables:"
     echo "  ADMIN_USER          Admin username"
@@ -273,7 +273,7 @@ while [[ $# -gt 0 ]]; do
             ADMIN_PASS="$2"
             shift 2
             ;;
-        -u|--url)
+        -U|--url)
             API_URL="$2"
             shift 2
             ;;

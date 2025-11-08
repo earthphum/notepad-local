@@ -20,12 +20,39 @@ pub async fn login(
     State(_state): State<AppState>,
     Json(req): Json<LoginRequest>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    let admin_user = env::var("ADMIN_USER").unwrap();
-    let admin_hash = env::var("ADMIN_PASS_HASH").unwrap();
+    let admin_user = match env::var("ADMIN_USER") {
+        Ok(user) => user,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Server configuration error" })),
+            );
+        }
+    };
+
+    let admin_hash = match env::var("ADMIN_PASS_HASH") {
+        Ok(hash) => hash,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Server configuration error" })),
+            );
+        }
+    };
 
     if req.username == admin_user && verify_password(&admin_hash, &req.password) {
-        let token = generate_token(&req.username);
-        return (StatusCode::OK, Json(json!({ "token": token })));
+        match generate_token(&req.username) {
+            Ok(token) => {
+                return (StatusCode::OK, Json(json!({ "token": token })));
+            }
+            Err(e) => {
+                eprintln!("Token generation failed: {}", e);
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Token generation failed" })),
+                );
+            }
+        }
     }
     (
         StatusCode::UNAUTHORIZED,

@@ -10,8 +10,8 @@ pub struct Claims {
     pub exp: usize,
 }
 
-pub fn generate_token(username: &str) -> String {
-    let secret = env::var("JWT_SECRET").unwrap();
+pub fn generate_token(username: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let secret = env::var("JWT_SECRET").map_err(|_| "JWT_SECRET environment variable not set")?;
     let claims = Claims {
         sub: username.to_string(),
         exp: (chrono::Utc::now().timestamp() + 3600) as usize,
@@ -21,7 +21,7 @@ pub fn generate_token(username: &str) -> String {
         &claims,
         &EncodingKey::from_secret(secret.as_bytes()),
     )
-    .unwrap()
+    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
 
 #[allow(dead_code)]
@@ -35,9 +35,20 @@ pub fn hash_password(password: &str) -> String {
 }
 
 pub fn verify_password(hash: &str, password: &str) -> bool {
-    let parsed_hash = PasswordHash::new(hash).unwrap();
+    let parsed_hash = match PasswordHash::new(hash) {
+        Ok(hash) => hash,
+        Err(e) => {
+            eprintln!("Failed to parse password hash: {}", e);
+            return false;
+        }
+    };
     let argon2 = Argon2::default();
     argon2
         .verify_password(password.as_bytes(), &parsed_hash)
         .is_ok()
+}
+
+/// Check if a password hash string is in valid Argon2 format
+pub fn is_valid_argon2_hash(hash: &str) -> bool {
+    PasswordHash::new(hash).is_ok()
 }
