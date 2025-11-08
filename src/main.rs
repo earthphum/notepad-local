@@ -14,7 +14,7 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 
 #[tokio::main]
 async fn main() {
@@ -90,7 +90,11 @@ async fn main() {
                     Method::DELETE,
                     Method::OPTIONS,
                 ])
-                .allow_headers(Any)
+                .allow_headers([
+                    axum::http::header::AUTHORIZATION,
+                    axum::http::header::ACCEPT,
+                    axum::http::header::CONTENT_TYPE,
+                ])
                 .allow_credentials(true),
         )
         // Apply request logging middleware to all routes
