@@ -48,9 +48,9 @@ async fn main() {
     let admin_router = Router::new()
         .route("/contents", get(content::get_all_contents))
         .route("/contents", post(content::create_content))
-        .route("/contents/:id", get(content::get_content_by_id_admin))
-        .route("/contents/:id", put(content::update_content))
-        .route("/contents/:id", delete(content::delete_content))
+        .route("/contents/{id}", get(content::get_content_by_id_admin))
+        .route("/contents/{id}", put(content::update_content))
+        .route("/contents/{id}", delete(content::delete_content))
         .route("/stats", get(content::get_stats));
 
     // Build the application with routes
@@ -59,7 +59,7 @@ async fn main() {
         .route("/", get(root_handler))
         .route("/health", get(health_check))
         .route("/contents", get(content::get_public_contents))
-        .route("/contents/:id", get(content::get_content_by_id))
+        .route("/contents/{id}", get(content::get_content_by_id))
         // Authentication route
         .route("/login", post(auth::login))
         // Nest admin routes under /admin
