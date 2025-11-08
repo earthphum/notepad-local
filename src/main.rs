@@ -57,6 +57,13 @@ async fn main() {
             .unwrap()
     });
 
+    // Debug log the frontend URL
+    println!("🔧 CORS Configuration - Frontend URL: {}", frontend_url);
+    println!(
+        "🔧 CORS Configuration - Frontend Origin: {:?}",
+        frontend_origin
+    );
+
     // Build admin routes (authentication handled in each handler)
     let admin_router = Router::new()
         .route("/contents", get(content::get_all_contents))
@@ -80,9 +87,11 @@ async fn main() {
         // Apply CORS middleware to allow frontend access
         .layer(
             CorsLayer::new()
-                .allow_origin(frontend_origin)
-                .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
-                .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
+                .allow_origin([
+                    "http://localhost:3000".parse::<HeaderValue>().unwrap(),
+                    "http://localhost:5173".parse::<HeaderValue>().unwrap(),
+                    frontend_origin,
+                ])
                 .allow_methods([
                     Method::GET,
                     Method::POST,
