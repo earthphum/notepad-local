@@ -1,5 +1,5 @@
 // ===== API Configuration =====
-const API_BASE_URL = "http://localhost:3000";
+const API_BASE_URL = "/api";
 let authToken = localStorage.getItem("authToken");
 let currentUser = null;
 
@@ -52,8 +52,8 @@ const elements = {
   privateNotes: document.getElementById("privateNotes"),
 
   // Login
-  loginUsername: document.getElementById("username"),
-  loginPassword: document.getElementById("password"),
+  loginUsername: document.getElementById("loginUsername"),
+  loginPassword: document.getElementById("loginPassword"),
 
   // Toast
   toast: document.getElementById("toast"),
