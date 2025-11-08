@@ -106,6 +106,22 @@ async fn main() {
                 ])
                 .allow_credentials(true),
         )
+        // Add cache control headers to prevent Cloudflare caching issues
+        .layer(axum::middleware::from_fn(
+            |request: axum::extract::Request, next: axum::middleware::Next| async move {
+                let response = next.run(request).await;
+
+                let (mut parts, body) = response.into_parts();
+
+                // Prevent caching for all API responses
+                parts.headers.insert(
+                    "cache-control",
+                    "no-store, no-cache, must-revalidate".parse().unwrap(),
+                );
+
+                axum::http::Response::from_parts(parts, body)
+            },
+        ))
         // Apply request logging middleware to all routes
         .layer(from_fn(logging::middleware::request_logging_middleware))
         .layer(from_fn(logging::middleware::error_logging_middleware));
