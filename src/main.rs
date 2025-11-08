@@ -13,6 +13,7 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use std::sync::Arc;
+use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
 async fn main() {
@@ -65,6 +66,13 @@ async fn main() {
         // Nest admin routes under /admin
         .nest("/admin", admin_router)
         .with_state(state)
+        // Apply CORS middleware to allow frontend access
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any) // In production, replace with your frontend URL
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
         // Apply request logging middleware to all routes
         .layer(from_fn(logging::middleware::request_logging_middleware))
         .layer(from_fn(logging::middleware::error_logging_middleware));
@@ -113,6 +121,7 @@ mod tests {
         body::Body,
         http::{Request, StatusCode},
     };
+    use tower::util::ServiceExt;
 
     #[tokio::test]
     async fn test_root_handler() {

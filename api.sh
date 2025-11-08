@@ -4,7 +4,7 @@
 # This script tests the notepad backend API endpoints with the new public/private note system
 
 # Configuration
-API_URL="http://127.0.0.1:3000"
+API_URL="https://terradominus.life"
 ADMIN_USER=${ADMIN_USER:-"admin"}
 ADMIN_PASS=${ADMIN_PASS:-"1234"}
 
