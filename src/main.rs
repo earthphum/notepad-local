@@ -1,14 +1,18 @@
 mod auth;
+mod content;
 mod db;
 mod logging;
 mod models;
-mod notes;
 mod state;
 mod utils;
 
-use axum::{Router, middleware, routing::get, routing::post};
+use axum::{
+    Router,
+    middleware::from_fn,
+    response::Json,
+    routing::{delete, get, post, put},
+};
 use std::sync::Arc;
-use tracing::info;
 
 #[tokio::main]
 async fn main() {
@@ -40,22 +44,96 @@ async fn main() {
         .parse::<u16>()
         .unwrap_or(3000);
 
-    // Build the application with middleware
+    // Build admin routes (authentication handled in each handler)
+    let admin_router = Router::new()
+        .route("/contents", get(content::get_all_contents))
+        .route("/contents", post(content::create_content))
+        .route("/contents/:id", get(content::get_content_by_id_admin))
+        .route("/contents/:id", put(content::update_content))
+        .route("/contents/:id", delete(content::delete_content))
+        .route("/stats", get(content::get_stats));
+
+    // Build the application with routes
     let app = Router::new()
+        // Public routes (no authentication required)
+        .route("/", get(root_handler))
+        .route("/health", get(health_check))
+        .route("/contents", get(content::get_public_contents))
+        .route("/contents/:id", get(content::get_content_by_id))
+        // Authentication route
         .route("/login", post(auth::login))
-        .route("/notes", get(notes::get_notes).post(notes::create_note))
-        .layer(middleware::from_fn(
-            logging::middleware::request_logging_middleware,
-        ))
-        .layer(middleware::from_fn(
-            logging::middleware::error_logging_middleware,
-        ))
-        .with_state(state);
+        // Nest admin routes under /admin
+        .nest("/admin", admin_router)
+        .with_state(state)
+        // Apply request logging middleware to all routes
+        .layer(from_fn(logging::middleware::request_logging_middleware))
+        .layer(from_fn(logging::middleware::error_logging_middleware));
 
     // Log application startup
     logging::log_app_startup(&host, port);
-    info!("🚀 Notepad API server starting on {}:{}", host, port);
+    println!("🚀 Notepad API server starting on {}:{}", host, port);
 
     let listener = tokio::net::TcpListener::bind((host, port)).await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+// Root handler
+async fn root_handler() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "message": "Welcome to Notepad Content Management API",
+        "version": "2.0.0",
+        "features": {
+            "public_notes": "GET /contents - Get all public notes",
+            "public_note_by_id": "GET /contents/:id - Get specific public note",
+            "authentication": "POST /login - Admin login",
+            "user_notes": "GET /admin/contents - Get all user notes (auth required)",
+            "create_note": "POST /admin/contents - Create new note (auth required)",
+            "update_note": "PUT /admin/contents/:id - Update note (auth required)",
+            "delete_note": "DELETE /admin/contents/:id - Delete note (auth required)",
+            "stats": "GET /admin/stats - Get user statistics (auth required)"
+        }
+    }))
+}
+
+// Health check endpoint
+async fn health_check() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "status": "healthy",
+        "timestamp": chrono::Utc::now(),
+        "service": "notepad-api",
+        "version": "2.0.0"
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{
+        Router,
+        body::Body,
+        http::{Request, StatusCode},
+    };
+
+    #[tokio::test]
+    async fn test_root_handler() {
+        let app = Router::new().route("/", get(root_handler));
+
+        let request = Request::builder().uri("/").body(Body::empty()).unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_health_check() {
+        let app = Router::new().route("/health", get(health_check));
+
+        let request = Request::builder()
+            .uri("/health")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 }

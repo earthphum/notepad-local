@@ -1,4 +1,6 @@
+use axum::http::HeaderMap;
 use bcrypt::{DEFAULT_COST, hash, verify};
+use jsonwebtoken::{DecodingKey, Validation, decode};
 use jsonwebtoken::{EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -65,6 +67,29 @@ pub fn verify_password(hash: &str, password: &str) -> bool {
             false
         }
     }
+}
+
+pub fn extract_user_from_token(headers: &HeaderMap) -> Result<String, Box<dyn std::error::Error>> {
+    let auth_header = headers
+        .get("authorization")
+        .ok_or("Missing authorization header")?
+        .to_str()
+        .map_err(|_| "Invalid authorization header format")?;
+
+    if !auth_header.starts_with("Bearer ") {
+        return Err("Invalid authorization header format".into());
+    }
+
+    let token = &auth_header[7..]; // Remove "Bearer " prefix
+    let secret = env::var("JWT_SECRET").map_err(|_| "JWT_SECRET environment variable not set")?;
+
+    let token_data = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::default(),
+    )?;
+
+    Ok(token_data.claims.sub)
 }
 
 #[cfg(test)]

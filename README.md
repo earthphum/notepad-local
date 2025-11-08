@@ -1,165 +1,61 @@
-# Notepad Backend API
+# Notepad Backend API v2.0
 
-A secure, production-ready REST API for a note-taking service built with Rust and Axum.
+A secure, production-ready REST API for a note-taking service with public and private notes support, built with Rust and Axum.
 
-## 🚀 Features
+## 🚀 New Features in v2.0
 
-- **Secure Authentication**: JWT-based authentication with bcrypt password hashing
-- **Production Logging**: Structured logging with environment-aware configurations
-- **Database Integration**: MySQL with async SQLx for type-safe database operations
-- **Error Handling**: Comprehensive error handling without exposing sensitive information
-- **Request Tracking**: Full request lifecycle logging with unique request IDs
-- **Security-First**: No sensitive data exposure in production logs
+- **🔐 Enhanced Security**: Full JWT-based authentication with user-specific note access
+- **🌍 Public & Private Notes**: Create notes that are either publicly accessible or private to the owner
+- **📝 Rich Note Structure**: Each note now has a title, content, visibility settings, and timestamps
+- **🔍 Smart Access Control**: Non-authenticated users can only view public notes
+- **📊 User Statistics**: Get statistics about your notes (total, public, private counts)
+- **🛡️ Production-Ready**: Structured logging, error handling, and security-first design
 
-## 📋 Requirements
+## 📋 API Endpoints
 
-- Rust 1.70+
-- MySQL 8.0+
-- Environment variables for configuration
+### Public Endpoints (No Authentication Required)
 
-## 🛠️ Installation
-
-### 1. Clone the Repository
-```bash
-git clone <repository-url>
-cd notepad-local
+#### Get All Public Notes
+```http
+GET /contents
 ```
 
-### 2. Set Up Environment
-
-#### Development Environment
-```bash
-cp .env.development.example .env
-# Edit .env with your local configuration
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "title": "Welcome Note",
+    "content": "This is a sample public note",
+    "user": "admin",
+    "is_public": true,
+    "created_at": "2024-01-20T10:30:45Z",
+    "updated_at": "2024-01-20T10:30:45Z"
+  }
+]
 ```
 
-#### Production Environment
-```bash
-cp .env.production.example .env.production
-# Edit .env.production with your production configuration
-# Ensure proper file permissions: chmod 600 .env.production
+#### Get Specific Public Note
+```http
+GET /contents/:id
 ```
 
-### 3. Database Setup
-```sql
--- Create database (adjust credentials as needed)
-CREATE DATABASE notepad_dev;
-```
-
-### 4. Generate Password Hash
-```bash
-# Generate bcrypt hash for your admin password
-cargo run --bin hash_generator
-
-# Example output:
-# Enter password to hash: your_secure_password
-# ✅ Generated hash: $2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.s5uO8W
-# Add this to your .env file as ADMIN_PASS_HASH=...
-```
-
-### 5. Install Dependencies
-```bash
-cargo build --release
-```
-
-## 🔧 Configuration
-
-### Environment Variables
-
-| Variable | Required | Description | Example |
-|----------|----------|-------------|---------|
-| `RUST_ENV` | Yes | Environment type | `production` or `development` |
-| `LOG_LEVEL` | Yes | Logging level | `info`, `debug`, `warn`, `error` |
-| `HOST` | No | Server host | `0.0.0.0` |
-| `PORT` | No | Server port | `3000` |
-| `DATABASE_URL` | Yes | MySQL connection string | `mysql://user:pass@host:3306/db` |
-| `ADMIN_USER` | Yes | Admin username | `admin` |
-| `ADMIN_PASS_HASH` | Yes | bcrypt hash of admin password | `$2b$12$...` |
-| `JWT_SECRET` | Yes | Secret for JWT signing (32+ chars) | `your_secure_secret_here` |
-
-### Security Considerations
-
-#### Production Environment
-- **JWT_SECRET**: Must be at least 32 characters long
-- **Logging**: Structured JSON format, no sensitive data exposure
-- **Error Messages**: Generic error messages for security
-- **Request IDs**: Unique tracking for each request
-
-#### Development Environment
-- **JWT_SECRET**: Can be shorter for convenience
-- **Logging**: Human-readable format with debug information
-- **Detailed Errors**: More verbose error messages for debugging
-
-## 🚀 Running the Application
-
-### Development
-```bash
-# Run in development mode
-cargo run
-
-# Run with specific log level
-RUST_LOG=debug cargo run
-```
-
-### Production
-```bash
-# Build optimized binary
-cargo build --release
-
-# Run production binary
-RUST_ENV=production ./target/release/backend
-```
-
-### Using Docker (Recommended for Production)
-```dockerfile
-# Dockerfile example
-FROM rust:1.70 as builder
-WORKDIR /app
-COPY . .
-RUN cargo build --release
-
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/target/release/backend /usr/local/bin/backend
-EXPOSE 3000
-CMD ["backend"]
-```
-
-## 📊 Logging
-
-### Production Logging
-In production, logs are structured as JSON for better log aggregation:
-
+**Response:**
 ```json
 {
-  "timestamp": "2024-01-20T10:30:45.123456Z",
-  "level": "info",
-  "message": "Authentication successful for user: admin",
-  "span": "login_request"
+  "id": 1,
+  "title": "Welcome Note",
+  "content": "This is a sample public note",
+  "user": "admin",
+  "is_public": true,
+  "created_at": "2024-01-20T10:30:45Z",
+  "updated_at": "2024-01-20T10:30:45Z"
 }
 ```
 
-### Development Logging
-In development, logs are human-readable with colors and formatting:
-
-```
-2024-01-20T10:30:45.123456Z  INFO notepad::auth: Authentication successful for user: admin
-                                  at src/auth.rs:95
-```
-
-### Log Categories
-
-| Category | Purpose | Production Safe |
-|----------|---------|-----------------|
-| Authentication | Login attempts, token generation | ✅ |
-| Database | Connection, query operations | ✅ |
-| API Requests | HTTP request lifecycle | ✅ |
-| Security Events | Suspicious activities | ✅ |
-| Errors | Application errors | ✅ (sanitized) |
-
-## 🧪 API Endpoints
-
 ### Authentication
+
+#### Login
 ```http
 POST /login
 Content-Type: application/json
@@ -177,11 +73,16 @@ Content-Type: application/json
 }
 ```
 
-### Notes Operations
+### User Endpoints (Authentication Required)
 
-#### Get All Notes
+All user endpoints require the JWT token in the `Authorization` header:
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+#### Get All User Notes
 ```http
-GET /notes
+GET /admin/contents
 Authorization: Bearer <jwt_token>
 ```
 
@@ -190,177 +91,154 @@ Authorization: Bearer <jwt_token>
 [
   {
     "id": 1,
-    "user": "earth",
-    "content": "My first note"
+    "title": "My Public Note",
+    "content": "This note is public",
+    "user": "admin",
+    "is_public": true,
+    "created_at": "2024-01-20T10:30:45Z",
+    "updated_at": "2024-01-20T10:30:45Z"
+  },
+  {
+    "id": 2,
+    "title": "My Private Note",
+    "content": "This note is private",
+    "user": "admin",
+    "is_public": false,
+    "created_at": "2024-01-20T10:35:22Z",
+    "updated_at": "2024-01-20T10:35:22Z"
   }
 ]
 ```
 
 #### Create Note
 ```http
-POST /notes
+POST /admin/contents
 Authorization: Bearer <jwt_token>
 Content-Type: application/json
 
 {
-  "content": "This is my new note"
+  "title": "My New Note",
+  "content": "This is the content of my note",
+  "is_public": false
 }
 ```
 
 **Response:**
 ```json
 {
-  "message": "Note created"
+  "message": "Note created successfully",
+  "id": 3
 }
 ```
 
-## 🧪 Testing
+#### Get Specific Note (User can access their own notes and any public notes)
+```http
+GET /admin/contents/:id
+Authorization: Bearer <jwt_token>
+```
 
-### Unit Tests
+#### Update Note
+```http
+PUT /admin/contents/:id
+Authorization: Bearer <jwt_token>
+Content-Type: application/json
+
+{
+  "title": "Updated Title",
+  "content": "Updated content",
+  "is_public": true
+}
+```
+
+**Note:** All fields are optional in the update request.
+
+**Response:**
+```json
+{
+  "message": "Note updated successfully"
+}
+```
+
+#### Delete Note
+```http
+DELETE /admin/contents/:id
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "message": "Note deleted successfully"
+}
+```
+
+#### Get User Statistics
+```http
+GET /admin/stats
+Authorization: Bearer <jwt_token>
+```
+
+**Response:**
+```json
+{
+  "total_notes": 5,
+  "public_notes": 3,
+  "private_notes": 2,
+  "user": "admin"
+}
+```
+
+## 🗄️ Database Schema
+
+The system uses MySQL with the following table structure:
+
+```sql
+CREATE TABLE notes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    user VARCHAR(100) NOT NULL,
+    is_public BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    INDEX idx_user (user),
+    INDEX idx_public (is_public),
+    INDEX idx_user_public (user, is_public),
+    INDEX idx_created_at (created_at)
+);
+```
+
+## 🛠️ Installation & Setup
+
+### 1. Clone and Setup
 ```bash
-# Run all tests
-cargo test
-
-# Run tests with output
-cargo test -- --nocapture
+git clone <repository-url>
+cd notepad-local
 ```
 
-### Integration Testing
-Use the provided API testing script:
-
+### 2. Environment Configuration
 ```bash
-# Make script executable
-chmod +x api.sh
-
-# Run API tests
-./api.sh
-
-# Test with custom credentials
-ADMIN_USER=myuser ADMIN_PASS=mypass ./api.sh
+# Copy environment template
+cp .env.example .env
+# Edit .env with your configuration
 ```
 
-### Environment-Specific Testing
+### 3. Database Setup
 ```bash
-# Test production configuration
-RUST_ENV=production cargo test
+# Create database
+mysql -u root -p
+CREATE DATABASE notepad_dev;
 
-# Test development configuration
-RUST_ENV=development cargo test
+# Run migration
+mysql -u root -p notepad_dev < migrate.sql
 ```
 
-## 🔍 Monitoring and Observability
-
-### Request Tracking
-Every request gets a unique UUID for tracking:
-
-```
-Request started - ID: 550e8400-e29b-41d4-a716-446655440000, Method: POST, Path: /login, IP: 192.168.1.1, User-Agent: curl/7.68.0
-Request completed - ID: 550e8400-e29b-41d4-a716-446655440000, Method: POST, Path: /login, Status: 200, Duration: 45.2ms
-```
-
-### Security Events
-Security-related events are logged with appropriate severity:
-
-```
-Security event - failed_auth: Authentication failed for user 'admin' - invalid password
-```
-
-### Performance Metrics
-Request duration is logged for performance monitoring:
-
-```
-Request completed - ID: 550e8400-e29b-41d4-a716-446655440000, Method: GET, Path: /notes, Status: 200, Duration: 12.3ms
-```
-
-## 🚨 Production Deployment Checklist
-
-### Security
-- [ ] Set strong JWT_SECRET (32+ characters)
-- [ ] Use HTTPS in production
-- [ ] Configure proper database credentials
-- [ ] Set appropriate file permissions on .env files
-- [ ] Review and harden database access controls
-- [ ] Set up proper reverse proxy (nginx/caddy)
-
-### Configuration
-- [ ] Set `RUST_ENV=production`
-- [ ] Configure appropriate `LOG_LEVEL` (usually `info` or `warn`)
-- [ ] Set up log rotation
-- [ ] Configure monitoring and alerting
-- [ ] Set up database backups
-- [ ] Configure health checks
-
-### Performance
-- [ ] Use release build (`cargo build --release`)
-- [ ] Configure connection pooling
-- [ ] Set appropriate timeouts
-- [ ] Monitor memory usage
-- [ ] Set up autoscaling if needed
-
-### Logging & Monitoring
-- [ ] Configure log aggregation (ELK stack, etc.)
-- [ ] Set up metrics collection
-- [ ] Configure alerting for errors
-- [ ] Monitor database performance
-- [ ] Set up uptime monitoring
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Update documentation
-7. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🆘 Troubleshooting
-
-### Common Issues
-
-#### Database Connection Failed
-```
-Error: Failed to connect to database: Access denied for user
-```
-**Solution**: Check your `DATABASE_URL` and ensure MySQL is running with correct credentials.
-
-#### JWT Token Invalid
-```
-Error: Token generation failed
-```
-**Solution**: Ensure `JWT_SECRET` is set and at least 32 characters in production.
-
-#### Password Verification Fails
-```
-Error: Authentication failed
-```
-**Solution**: Regenerate the password hash using `cargo run --bin hash_generator`.
-
-### Debug Mode
-Enable debug logging for troubleshooting:
-
+### 4. Generate Password Hash
 ```bash
-RUST_ENV=development LOG_LEVEL=debug cargo run
-```
+# Generate bcrypt hash for your admin password
+cargo run --bin hash_generator
 
-### Log Analysis
-Search for specific events in logs:
-
-```bash
-# Find authentication failures
-grep "Authentication failed" app.log
-
-# Find database errors
-grep "Database error" app.log
-
-# Find slow requests
-grep "Duration.*ms" app.log | awk '$NF > 1000'
-```
-
----
-
-Built with ❤️ and Rust for secure, production-ready applications.
+# Example output:
+# Enter password to hash: your_secure_password
+# ✅ Generated hash: $2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/RK.s5uO8
